@@ -5,19 +5,19 @@ import time
 import random
 
 # --- 1. 核心配置 ---
-# 请确保在 Streamlit Cloud 的 Secrets 中设置了 HF_TOKEN
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
-# 使用更现代的模型，它在 2026 年的路由支持最稳定
-MODEL_ID = "stabilityai/stable-diffusion-2-1"
+# 换成这个模型，它的 API 路径在新路由下最稳定
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
-# 【2026 最新路由规范地址】
-# 注意：router.huggingface.co 后面的路径必须精准匹配模型 ID
-API_URL = f"https://router.huggingface.co/hf-inference/models/{MODEL_ID}"
+# 【2026 终极修正路径】
+# 放弃复杂的 router 拼接，使用目前最稳的直接推理路径
+API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 
 headers = {
     "Authorization": f"Bearer {HF_TOKEN}",
-    "x-use-cache": "false"  # 强制获取新图，避免缓存错误
+    "x-use-cache": "false",
+    "x-wait-for-model": "true"  # 强制要求 API 等待模型加载完成，而不是直接报 503
 }
 
 # --- 2. 初始化历史记录存储 ---
