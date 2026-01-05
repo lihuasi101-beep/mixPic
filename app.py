@@ -6,18 +6,16 @@ import random
 
 # --- 1. 核心配置 ---
 HF_TOKEN = st.secrets["HF_TOKEN"]
-
-# 换成这个模型，它的 API 路径在新路由下最稳定
 MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
-# 【2026 终极修正路径】
-# 放弃复杂的 router 拼接，使用目前最稳的直接推理路径
-API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+# 【2026 官方指定唯一合法路由格式】
+# 注意：hf-inference 后面没有 models，直接接模型 ID
+API_URL = f"https://router.huggingface.co/hf-inference/{MODEL_ID}"
 
 headers = {
     "Authorization": f"Bearer {HF_TOKEN}",
-    "x-use-cache": "false",
-    "x-wait-for-model": "true"  # 强制要求 API 等待模型加载完成，而不是直接报 503
+    "Content-Type": "application/json",
+    "x-use-cache": "false"
 }
 
 # --- 2. 初始化历史记录存储 ---
@@ -42,23 +40,22 @@ with st.sidebar:
 
 # --- 4. 核心请求函数 ---
 def query_image(payload):
-    """
-    直接使用 requests 绕过 SDK 的 StopIteration Bug
-    """
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+    # 使用更新后的 API_URL
+    response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
     
-    # 情况 A：模型正在启动 (503)
-    if response.status_code == 503:
-        with st.status("🚀 模型正在从深层存储中唤醒，请稍候...", expanded=False):
-            time.sleep(10)
-            return query_image(payload)
-            
-    # 情况 B：成功返回 (200)
-    if response.status_code == 200:
-        return response.content
+    # 如果返回 410 (虽然我们改了 URL，但万一负载均衡抖动)
+    if response.status_code == 410:
+        st.error("检测到旧版 API 彻底失效，请确保 URL 已更新为 router 格式。")
         
-    # 情况 C：报错处理
-    raise Exception(f"API 状态码 {response.status_code}: {response.text}")
+    # 如果返回 503 (模型正在唤醒)
+    if response.status_code == 503:
+        time.sleep(10)
+        return query_image(payload)
+        
+    if response.status_code != 200:
+        raise Exception(f"API 状态码 {response.status_code}: {response.text}")
+        
+    return response.content
 
 # --- 5. 生成按钮逻辑 ---
 if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary", use_container_width=True):
