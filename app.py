@@ -7,9 +7,11 @@ import time
 # --- 1. 核心配置 ---
 # 建议：如果是为了发布到网上，Token 最好通过 st.secrets 读取（见下文部署建议）
 HF_TOKEN = st.secrets["HF_TOKEN"]
-# HF_TOKEN = "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" 
-client = InferenceClient(token=HF_TOKEN)
 MODEL_ID = "runwayml/stable-diffusion-v1-5"
+
+# 建议直接在初始化时指定
+client = InferenceClient(model=MODEL_ID, token=HF_TOKEN)
+
 
 # --- 2. 初始化历史记录存储 ---
 if "history" not in st.session_state:
@@ -63,7 +65,7 @@ if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary"
                     })
                     
                 except Exception as e:
-                    st.error(f"生成失败: {e}")
+                    st.error(f"生成失败详情: {type(e).__name__} - {str(e)}")
 
 # --- 5. 创意画廊展示 ---
 if st.session_state.history:
