@@ -6,7 +6,8 @@ import time
 
 # --- 1. 核心配置 ---
 # 建议：如果是为了发布到网上，Token 最好通过 st.secrets 读取（见下文部署建议）
-HF_TOKEN = "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" 
+HF_TOKEN = st.secrets["HF_TOKEN"]
+# HF_TOKEN = "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" 
 client = InferenceClient(token=HF_TOKEN)
 MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
