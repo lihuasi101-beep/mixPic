@@ -9,7 +9,7 @@ import time
 HF_TOKEN = st.secrets["HF_TOKEN"]
 # HF_TOKEN = "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" 
 client = InferenceClient(token=HF_TOKEN)
-MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
 # --- 2. 初始化历史记录存储 ---
 if "history" not in st.session_state:
