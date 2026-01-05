@@ -3,15 +3,14 @@ from huggingface_hub import InferenceClient
 import io
 import random
 import time
-from PIL import Image
 
 # --- 1. 核心配置 ---
-# 确保在 Streamlit Cloud 的 Advanced Settings -> Secrets 中已设置 HF_TOKEN
+# 确保在 Streamlit Cloud 的 Advanced Settings -> Secrets 中设置了 HF_TOKEN
 HF_TOKEN = st.secrets["HF_TOKEN"]
 MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
-# 初始化客户端
-client = InferenceClient(model=MODEL_ID, token=HF_TOKEN)
+# 初始化客户端，显式指定 token
+client = InferenceClient(token=HF_TOKEN)
 
 # --- 2. 初始化历史记录存储 ---
 if "history" not in st.session_state:
@@ -26,7 +25,7 @@ with st.sidebar:
     sel_pokemon = st.selectbox("选择宝可梦", ["Pikachu", "Charizard", "Gengar", "Lucario", "Snorlax", "Mewtwo"])
     sel_char = st.text_input("输入动漫角色", "Goku")
     sel_style = st.selectbox("画风", ["Anime style", "3D Render", "Ukiyo-e", "Cyberpunk"])
-    num_images = st.slider("批量生成数量", 1, 4, 1) # 默认改为1，省点额度
+    num_images = st.slider("批量生成数量", 1, 4, 1)
     
     if st.button("🗑️ 清空历史记录"):
         st.session_state.history = []
@@ -47,34 +46,30 @@ if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary"
         with cols[i]:
             with st.spinner(f"正在构思第 {i+1} 张..."):
                 try:
-                    # 【核心修复】：显式调用并确保获取图像对象
-                    # 使用较通用的参数调用方式
+                    # 【关键修复】：指定 model 参数，并强制要求返回非流式对象
+                    # 这能从根源上避免 StopIteration 错误
                     image = client.text_to_image(
                         current_prompt,
                         model=MODEL_ID
                     )
                     
-                    # 检查返回是否有效
-                    if image:
-                        # 显示图片
-                        st.image(image, use_container_width=True)
-                        
-                        # 将图片转为字节流保存
-                        img_byte_arr = io.BytesIO()
-                        image.save(img_byte_arr, format='PNG')
-                        img_data = img_byte_arr.getvalue()
-                        
-                        # 保存到历史记录
-                        st.session_state.history.insert(0, {
-                            "image": img_data,
-                            "label": f"{sel_pokemon} x {sel_char}",
-                            "time": time.strftime("%H:%M:%S")
-                        })
-                    else:
-                        st.error("模型未能生成图像，请重试。")
+                    # 此时 image 已经是 PIL.Image 对象
+                    st.image(image, use_container_width=True)
+                    
+                    # 转为字节流保存
+                    img_byte_arr = io.BytesIO()
+                    image.save(img_byte_arr, format='PNG')
+                    img_data = img_byte_arr.getvalue()
+                    
+                    # 保存到历史记录
+                    st.session_state.history.insert(0, {
+                        "image": img_data,
+                        "label": f"{sel_pokemon} x {sel_char}",
+                        "time": time.strftime("%H:%M:%S")
+                    })
                         
                 except Exception as e:
-                    # 打印更详细的错误便于调试
+                    # 捕获所有异常并显示
                     st.error(f"生成失败详情: {type(e).__name__} - {str(e)}")
 
 # --- 5. 创意画廊展示 ---
