@@ -5,23 +5,29 @@ import time
 import random
 
 # --- 1. 核心配置 ---
-# --- 1. 核心配置 ---
+# 请确保在 Streamlit Cloud 的 Secrets 中设置了 HF_TOKEN
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
-# 【关键修改】：使用全新的 2026 路由地址
-# 格式为：https://router.huggingface.co/hf-inference/models/模型ID
-MODEL_ID = "runwayml/stable-diffusion-v1-5"
+# 使用更现代的模型，它在 2026 年的路由支持最稳定
+MODEL_ID = "stabilityai/stable-diffusion-2-1"
+
+# 【2026 最新路由规范地址】
+# 注意：router.huggingface.co 后面的路径必须精准匹配模型 ID
 API_URL = f"https://router.huggingface.co/hf-inference/models/{MODEL_ID}"
 
-headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+headers = {
+    "Authorization": f"Bearer {HF_TOKEN}",
+    "x-use-cache": "false"  # 强制获取新图，避免缓存错误
+}
 
 # --- 2. 初始化历史记录存储 ---
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # --- 3. UI 界面 ---
-st.set_page_config(page_title="IP Fusion Pro", layout="wide", page_icon="🎨")
+st.set_page_config(page_title="IP Fusion Pro 2026", layout="wide", page_icon="🎨")
 st.title("🚀 跨界 IP 融合专业版")
+st.caption(f"当前运行模型: {MODEL_ID} (通过 HF Router 部署)")
 
 with st.sidebar:
     st.header("控制台")
@@ -34,38 +40,45 @@ with st.sidebar:
         st.session_state.history = []
         st.rerun()
 
-# --- 4. 生成函数 (底层请求) ---
+# --- 4. 核心请求函数 ---
 def query_image(payload):
-    # 现在请求会发送到 https://router.huggingface.co...
-    response = requests.post(API_URL, headers=headers, json=payload)
+    """
+    直接使用 requests 绕过 SDK 的 StopIteration Bug
+    """
+    response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
     
-    # 如果遇到 503，说明模型正在加载，需要重试
+    # 情况 A：模型正在启动 (503)
     if response.status_code == 503:
-        time.sleep(5)
-        return query_image(payload)
+        with st.status("🚀 模型正在从深层存储中唤醒，请稍候...", expanded=False):
+            time.sleep(10)
+            return query_image(payload)
+            
+    # 情况 B：成功返回 (200)
+    if response.status_code == 200:
+        return response.content
         
-    if response.status_code != 200:
-        raise Exception(f"API Error {response.status_code}: {response.text}")
-    return response.content
+    # 情况 C：报错处理
+    raise Exception(f"API 状态码 {response.status_code}: {response.text}")
 
-# --- 5. 生成逻辑 ---
+# --- 5. 生成按钮逻辑 ---
 if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary", use_container_width=True):
     cols = st.columns(num_images)
     
     for i in range(num_images):
+        # 构造提示词
         random_seed = random.randint(1, 1000000)
         current_prompt = (
-            f"A unique fusion of {sel_pokemon} and {sel_char}, detailed {sel_style}, "
-            f"masterpiece, 8k, seed {random_seed}"
+            f"A unique fusion of {sel_pokemon} and {sel_char}, {sel_style}, "
+            f"masterpiece, high quality, 8k, seed {random_seed}"
         )
         
         with cols[i]:
             with st.spinner(f"正在构思第 {i+1} 张..."):
                 try:
-                    # 直接获取二进制数据，避开 SDK 的迭代器 Bug
+                    # 发起请求
                     image_bytes = query_image({"inputs": current_prompt})
                     
-                    # 显示图片
+                    # 验证并显示图片
                     st.image(image_bytes, use_container_width=True)
                     
                     # 保存到历史记录
@@ -76,7 +89,7 @@ if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary"
                     })
                         
                 except Exception as e:
-                    st.error(f"生成失败详情: {str(e)}")
+                    st.error(f"生成失败: {str(e)}")
 
 # --- 6. 创意画廊展示 ---
 if st.session_state.history:
