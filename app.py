@@ -5,9 +5,14 @@ import time
 import random
 
 # --- 1. 核心配置 ---
+# --- 1. 核心配置 ---
 HF_TOKEN = st.secrets["HF_TOKEN"]
-# 使用最稳定的基础模型
-API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+
+# 【关键修改】：使用全新的 2026 路由地址
+# 格式为：https://router.huggingface.co/hf-inference/models/模型ID
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
+API_URL = f"https://router.huggingface.co/hf-inference/models/{MODEL_ID}"
+
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 # --- 2. 初始化历史记录存储 ---
@@ -31,7 +36,14 @@ with st.sidebar:
 
 # --- 4. 生成函数 (底层请求) ---
 def query_image(payload):
+    # 现在请求会发送到 https://router.huggingface.co...
     response = requests.post(API_URL, headers=headers, json=payload)
+    
+    # 如果遇到 503，说明模型正在加载，需要重试
+    if response.status_code == 503:
+        time.sleep(5)
+        return query_image(payload)
+        
     if response.status_code != 200:
         raise Exception(f"API Error {response.status_code}: {response.text}")
     return response.content
