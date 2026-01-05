@@ -1,16 +1,14 @@
 import streamlit as st
-from huggingface_hub import InferenceClient
+import requests
 import io
-import random
 import time
+import random
 
 # --- 1. 核心配置 ---
-# 确保在 Streamlit Cloud 的 Advanced Settings -> Secrets 中设置了 HF_TOKEN
 HF_TOKEN = st.secrets["HF_TOKEN"]
-MODEL_ID = "runwayml/stable-diffusion-v1-5"
-
-# 初始化客户端，显式指定 token
-client = InferenceClient(token=HF_TOKEN)
+# 使用最稳定的基础模型
+API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 # --- 2. 初始化历史记录存储 ---
 if "history" not in st.session_state:
@@ -31,48 +29,44 @@ with st.sidebar:
         st.session_state.history = []
         st.rerun()
 
-# --- 4. 生成逻辑 ---
+# --- 4. 生成函数 (底层请求) ---
+def query_image(payload):
+    response = requests.post(API_URL, headers=headers, json=payload)
+    if response.status_code != 200:
+        raise Exception(f"API Error {response.status_code}: {response.text}")
+    return response.content
+
+# --- 5. 生成逻辑 ---
 if st.button(f"✨ 立即融合并生成 {num_images} 张方案", type="primary", use_container_width=True):
     cols = st.columns(num_images)
     
     for i in range(num_images):
-        variation_keywords = ["action pose", "close-up portrait", "dramatic lighting", "scenic background"]
         random_seed = random.randint(1, 1000000)
         current_prompt = (
-            f"A unique fusion of {sel_pokemon} and {sel_char}, {random.choice(variation_keywords)}, "
-            f"detailed {sel_style}, masterpiece, 8k, seed {random_seed}"
+            f"A unique fusion of {sel_pokemon} and {sel_char}, detailed {sel_style}, "
+            f"masterpiece, 8k, seed {random_seed}"
         )
         
         with cols[i]:
             with st.spinner(f"正在构思第 {i+1} 张..."):
                 try:
-                    # 【关键修复】：指定 model 参数，并强制要求返回非流式对象
-                    # 这能从根源上避免 StopIteration 错误
-                    image = client.text_to_image(
-                        current_prompt,
-                        model=MODEL_ID
-                    )
+                    # 直接获取二进制数据，避开 SDK 的迭代器 Bug
+                    image_bytes = query_image({"inputs": current_prompt})
                     
-                    # 此时 image 已经是 PIL.Image 对象
-                    st.image(image, use_container_width=True)
-                    
-                    # 转为字节流保存
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format='PNG')
-                    img_data = img_byte_arr.getvalue()
+                    # 显示图片
+                    st.image(image_bytes, use_container_width=True)
                     
                     # 保存到历史记录
                     st.session_state.history.insert(0, {
-                        "image": img_data,
+                        "image": image_bytes,
                         "label": f"{sel_pokemon} x {sel_char}",
                         "time": time.strftime("%H:%M:%S")
                     })
                         
                 except Exception as e:
-                    # 捕获所有异常并显示
-                    st.error(f"生成失败详情: {type(e).__name__} - {str(e)}")
+                    st.error(f"生成失败详情: {str(e)}")
 
-# --- 5. 创意画廊展示 ---
+# --- 6. 创意画廊展示 ---
 if st.session_state.history:
     st.divider()
     st.subheader("🖼️ 历史实验画廊 (本会话)")
